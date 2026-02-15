@@ -3,13 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>화이트데이 이벤트</title>​
+<title>나랑 쿠지 하러가자</title>
 
 <style>
+/* 1. 기본 스타일 설정 */
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-button { -webkit-appearance: none; appearance: none; font: inherit; }
-​
 body {
   margin: 0;
   min-height: 100vh;
@@ -17,14 +16,14 @@ body {
   justify-content: center;
   align-items: center;
 
-  /* ⭐ 배경 이미지 수정하려면 01.jpg 파일 교체 */
-  background-image:
-    linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)),
-    url("01.jpg");
-
+  /* 배경 이미지 설정 (파일이 있으므로 바로 적용) */
+  background-image: linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.1)), url('01.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+  
+  /* 이미지가 로딩 안 될 경우를 대비한 배경색 */
+  background-color: #fdfbfb;
 
   font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   overflow: hidden;
@@ -32,225 +31,193 @@ body {
   padding: 24px;
 }
 
+/* 2. 하얀색 카드창 디자인 */
 .card {
   background: rgba(255,255,255,0.95);
-  padding: 32px;
+  padding: 40px 32px;
   border-radius: 20px;
   text-align: center;
-  box-shadow: 0 15px 40px rgba(0,0,0,0.25);
+  box-shadow: 0 15px 40px rgba(0,0,0,0.2);
   max-width: 420px;
   width: 100%;
 }
-​
-/* ⭐ 여기 문구 수정 */
+
 h1 {
-  font-size: 20px;
-  margin-bottom: 24px;
-  line-height: 1.6;
+  font-size: 26px;
+  margin-bottom: 40px;
+  line-height: 1.4;
+  color: #333;
+  word-break: keep-all;
 }
-​
+
+/* 3. 버튼들이 들어갈 공간 */
 .btn-container {
   position: relative;
-  width: 280px;
-  height: 56px;
-  margin: 0 auto;
+  width: 100%;
+  height: 240px; /* 버튼이 도망갈 공간 */
 }
 
+/* 버튼 공통 스타일 */
 .btn {
   position: absolute;
-  top: 0;
-
   width: 120px;
-  height: 48px;
-
+  height: 50px;
   border-radius: 30px;
   border: none;
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: bold;
   cursor: pointer;
-  transition: transform 0.15s ease;
-  user-select: none;
+  transition: transform 0.1s ease;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
-.btn:active { transform: scale(0.98); }
+.btn:active { transform: scale(0.95); }
 
+/* Yes 버튼 (왼쪽) */
 .yes {
-  left: 0;
-  background: #ff4d6d; /* ⭐ Yes 색상 변경 가능 */
+  left: 20px;
+  top: 80px;
+  background: #ff4d6d;
   color: white;
-  z-index: 2;
+  z-index: 10;
 }
-​
+
+/* No 버튼 (오른쪽) */
 .no {
-  left: 160px;
-  background: #d6d6d6; /* ⭐ No 색상 변경 가능 */
-  color: #111;
+  right: 20px;
+  top: 80px;
+  background: #e9ecef;
+  color: #495057;
   z-index: 1;
 }
 
-/* ⭐ Yes 눌렀을 때 나오는 문구 수정 */
+/* 4. 결과 화면 (처음엔 안 보임) */
 .result {
-  margin-top: 18px;
-  font-size: 20px;
+  display: none; /* 숨김 처리 */
+  margin-top: 20px;
+  font-size: 24px;
   font-weight: bold;
   color: #ff4d6d;
-  display: none;
+  animation: pop 0.5s ease forwards;
 }
-​
+
+@keyframes pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 하트 효과 */
 .heart {
   position: fixed;
+  font-size: 24px;
   pointer-events: none;
-  animation: float 2.8s linear forwards;
+  animation: float 3s linear forwards;
+  z-index: 100;
 }
 
 @keyframes float {
-  0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(-300px); opacity: 0; }
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
 }
-
 </style>
 </head>
-  
-<body>​
+
+<body>
 
 <div class="card">
-  <h1>
-    ⭐ 뽑기하러<br>
-    갈래?
+  <h1 id="title">
+    ⭐ 나랑 쿠지<br>
+    하러가자
   </h1>
-​
+
   <div class="btn-container" id="btnArea">
     <button class="btn yes" id="yesBtn" type="button">Yes</button>
     <button class="btn no" id="noBtn" type="button">No</button>
   </div>
 
-​
-
   <div class="result" id="result">
-
-    가자
-
+    ❤️ 좋아! 얼른 가자! ❤️
   </div>
-
 </div>
 
-​
-
 <script>
-
 const yesBtn = document.getElementById("yesBtn");
-
 const noBtn = document.getElementById("noBtn");
-
 const btnArea = document.getElementById("btnArea");
-
 const result = document.getElementById("result");
+const title = document.getElementById("title");
 
-​
-
+// 1. Yes 버튼 클릭 시 실행
 yesBtn.addEventListener("click", () => {
-
-  /* ⭐ Yes 눌렀을 때 바뀌는 배경 (02.jpg 파일 교체 가능) */
-
-  document.body.style.backgroundImage =
-
-    'linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url("02.jpg")';
-
-​
-
+  // 배경 이미지 변경 (02.jpg)
+  document.body.style.backgroundImage = "url('02.jpg')";
+  
+  // 버튼과 제목 숨기기
+  yesBtn.style.display = "none";
+  noBtn.style.display = "none";
+  title.style.display = "none";
+  
+  // 결과 문구 보여주기
   result.style.display = "block";
-
+  
+  // 하트 날리기
   createHearts();
-
 });
 
-​
-
+// 2. 하트 만드는 함수
 function createHearts() {
+  for (let i = 0; i < 40; i++) {
+    setTimeout(() => {
+      const heart = document.createElement("div");
+      heart.className = "heart";
+      heart.textContent = ["❤️", "💖", "💘", "💕"][Math.floor(Math.random()*4)];
+      heart.style.left = Math.random() * window.innerWidth + "px";
+      heart.style.top = window.innerHeight + "px";
+      document.body.appendChild(heart);
+      setTimeout(() => heart.remove(), 3000);
+    }, i * 50);
+  }
+}
 
-  for (let i = 0; i < 20; i++) {
+// 3. No 버튼 도망가는 함수
+function moveNo() {
+  const containerRect = btnArea.getBoundingClientRect();
+  const btnW = 120; // 버튼 너비
+  const btnH = 50;  // 버튼 높이
 
-    const heart = document.createElement("div");
+  // 이동 가능한 최대 범위
+  const maxX = containerRect.width - btnW;
+  const maxY = containerRect.height - btnH;
 
-    heart.className = "heart";
+  let newX = Math.random() * maxX;
+  let newY = Math.random() * maxY;
 
-    heart.textContent = "❤️";
-
-    heart.style.left = Math.random() * window.innerWidth + "px";
-
-    heart.style.top = window.innerHeight + "px";
-
-    document.body.appendChild(heart);
-
-    setTimeout(() => heart.remove(), 2800);
-
+  // Yes 버튼(왼쪽 중간) 근처로 가면 강제로 위치 조정
+  // Yes 버튼 위치 대략: x=20, y=80 / 너비 120
+  if (newX < 150 && newY > 40 && newY < 140) {
+    newX = 160 + Math.random() * (maxX - 160); // 오른쪽 공간으로 보냄
   }
 
+  // 위치 적용
+  noBtn.style.left = newX + "px";
+  noBtn.style.top  = newY + "px";
+  noBtn.style.right = "auto"; 
 }
 
-​
-
-function moveNo() {
-
-  const w = 120;
-
-  const h = 48;
-
-​
-
-  const maxX = btnArea.clientWidth - w;
-
-  const maxY = btnArea.clientHeight - h;
-
-​
-
-  const x = Math.random() * maxX;
-
-  const y = Math.random() * maxY;
-
-​
-
-  noBtn.style.left = x + "px";
-
-  noBtn.style.top  = y + "px";
-
-}
-
-​
-
+// PC 마우스
 noBtn.addEventListener("mouseenter", moveNo);
 
-noBtn.addEventListener("pointerdown", (e) => {
-
+// 모바일 터치
+noBtn.addEventListener("touchstart", (e) => {
   e.preventDefault();
-
   moveNo();
-
 }, { passive: false });
 
 noBtn.addEventListener("click", (e) => {
-
   e.preventDefault();
-
   moveNo();
-
 });
-
-​
-
-window.addEventListener("load", () => {
-
-  noBtn.style.left = "160px";
-
-  noBtn.style.top = "0px";
-
-});
-
 </script>
 
-​
-
 </body>
-
 </html>
-
-​
