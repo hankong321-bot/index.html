@@ -1,6 +1,20 @@
 import { ObjectDetector } from './vendor/mediapipe/vision_bundle.mjs';
 import { FILTERS, getFilter, applyPreview, renderFiltered } from './filters.js';
-import { Guide, pickSubject, LABEL_KO } from './guide.js';
+import { Guide, pickSubject, iou, LABEL_KO } from './guide.js';
+
+// 가이드 반응 민감도. 값이 작을수록(부드럽게) 화면이 덜 흔들리고 안내가 덜 바뀐다.
+//  smooth   : 새 감지값을 얼마나 반영할지 (0~1, 지수 평활)
+//  glide    : 화면 표시를 목표값으로 따라가는 속도 (초당 비율, 클수록 빠름)
+//  hold     : 감지가 끊겨도 피사체를 유지하는 시간(ms)
+//  switchN  : 다른 피사체로 바꾸려면 연속 몇 번 이겨야 하는지
+//  msgHold  : 안내 문구가 바뀌기 전 유지돼야 하는 시간(ms)
+//  alignIn/alignOut : 정렬 판정 범위 (진입/해제)
+//  minScore : 주 피사체로 인정할 최소 신뢰도
+const SENSITIVITY = {
+  soft:   { name: '부드럽게', smooth: 0.2,  glide: 6,  hold: 1500, switchN: 5, msgHold: 900, alignIn: 0.07,  alignOut: 0.10,  minScore: 0.5 },
+  normal: { name: '보통',     smooth: 0.35, glide: 10, hold: 1000, switchN: 3, msgHold: 550, alignIn: 0.05,  alignOut: 0.075, minScore: 0.45 },
+  sharp:  { name: '민감',     smooth: 0.5,  glide: 18, hold: 600,  switchN: 1, msgHold: 250, alignIn: 0.035, alignOut: 0.055, minScore: 0.4 },
+};
 
 // ---------------- 공통 ----------------
 const $ = (s) => document.querySelector(s);
@@ -39,6 +53,10 @@ const state = {
   autoSave: store.get('autoSave', true),
   hiRes: store.get('hiRes', true),
   haptic: store.get('haptic', true),
+  sens: store.get('sens', 'soft'),
+  candidate: null, candidateN: 0,
+  view: null,            // 화면에 그리는 (부드럽게 따라가는) 박스·목표점
+  lastDraw: 0,
 
   stream: null, track: null, imageCapture: null,
   hwZoom: null,          // {min, max} 하드웨어 줌 지원 시
@@ -59,6 +77,12 @@ const state = {
 };
 
 const guide = new Guide();
+const P = () => SENSITIVITY[state.sens] || SENSITIVITY.soft;
+function applySensitivity() {
+  const p = P();
+  guide.setThresholds(p.alignIn, p.alignOut);
+}
+applySensitivity();
 
 function toast(msg, ms = 1800) {
   el.toast.textContent = msg;
@@ -311,27 +335,68 @@ function videoBoxToFrame(bb) {
 }
 
 function handleDetections(dets, now) {
-  const boxes = dets.map((d) => {
-    const c = d.categories?.[0] || {};
-    return { ...videoBoxToFrame(d.boundingBox), label: c.categoryName || 'object', score: c.score || 0 };
-  });
-  const pick = pickSubject(boxes, state.subject);
-  if (pick) {
-    const p = state.subject;
-    if (p && p.label === pick.label) {
-      // 흔들림을 줄이기 위한 지수 평활
-      const a = 0.45;
-      state.subject = {
-        label: pick.label, score: pick.score,
-        x: p.x + (pick.x - p.x) * a, y: p.y + (pick.y - p.y) * a,
-        w: p.w + (pick.w - p.w) * a, h: p.h + (pick.h - p.h) * a,
-      };
-    } else {
-      state.subject = pick;
-      guide.reset();
+  const p = P();
+  const boxes = dets
+    .map((d) => {
+      const c = d.categories?.[0] || {};
+      return { ...videoBoxToFrame(d.boundingBox), label: c.categoryName || 'object', score: c.score || 0 };
+    })
+    .filter((b) => b.score >= p.minScore);
+
+  const cur = state.subject;
+  // 1) 지금 피사체가 이번 프레임에도 있으면 그 박스로 부드럽게 갱신
+  let match = null;
+  if (cur) {
+    let best = 0.2;
+    for (const b of boxes) {
+      if (b.label !== cur.label) continue;
+      const o = iou(cur, b);
+      if (o > best) { best = o; match = b; }
     }
-    state.lastSeen = now;
   }
+  const smoothInto = (b) => {
+    const a = p.smooth;
+    state.subject = {
+      label: cur.label, score: b.score,
+      x: cur.x + (b.x - cur.x) * a, y: cur.y + (b.y - cur.y) * a,
+      w: cur.w + (b.w - cur.w) * a, h: cur.h + (b.h - cur.h) * a,
+    };
+    state.lastSeen = now;
+  };
+
+  const pick = pickSubject(boxes, cur);
+  if (!cur || now - state.lastSeen > p.hold) {
+    // 2) 피사체가 없거나 오래 놓쳤으면 바로 새로 잡는다
+    if (pick) { state.subject = pick; state.lastSeen = now; state.view = null; guide.reset(); }
+    state.candidate = null; state.candidateN = 0;
+    return;
+  }
+  if (pick && (pick === match || (pick.label === cur.label && iou(pick, cur) > 0.2))) {
+    smoothInto(pick);
+    state.candidate = null; state.candidateN = 0;
+    return;
+  }
+  // 3) 다른 대상이 이겼을 때: 여러 번 연속으로 이겨야 바꾼다 (그동안은 기존 피사체 유지)
+  if (pick) {
+    if (state.candidate && state.candidate.label === pick.label && iou(state.candidate, pick) > 0.3) state.candidateN++;
+    else { state.candidate = pick; state.candidateN = 1; }
+    if (state.candidateN >= p.switchN) {
+      state.subject = pick; state.lastSeen = now; guide.reset();
+      state.candidate = null; state.candidateN = 0;
+      return;
+    }
+  }
+  if (match) smoothInto(match);
+}
+
+// 화면 표시값을 목표값 쪽으로 시간에 비례해 미끄러지듯 이동 (감지는 초당 ~10번이라 그대로 그리면 뚝뚝 끊김)
+function glideTo(view, target, k) {
+  if (!view) return { ...target };
+  const out = { ...target };
+  for (const key of Object.keys(target)) {
+    if (typeof target[key] === 'number') out[key] = view[key] + (target[key] - view[key]) * k;
+  }
+  return out;
 }
 
 // ---------------- 그리기 루프 ----------------
@@ -371,9 +436,12 @@ function draw(now) {
   if (state.detectorState === 'loading') { setHint('AI 모델 불러오는 중…'); return; }
   if (state.detectorState !== 'ready') { setHint(null); return; }
 
-  const sub = state.subject && now - state.lastSeen < 700 ? state.subject : null;
+  const dt = Math.min(0.1, (now - (state.lastDraw || now)) / 1000);
+  state.lastDraw = now;
+  const sub = state.subject && now - state.lastSeen < P().hold ? state.subject : null;
   if (!sub) {
     state.analysis = null;
+    state.view = null;
     setHint('피사체를 찾는 중…');
     hideSuggest();
     return;
@@ -384,11 +452,19 @@ function draw(now) {
   state.analysis = a;
   if (a.aligned && !prevAligned && state.haptic) navigator.vibrate?.(20);
 
-  const col = a.aligned ? '#4ade80' : '#ffffff';
-  drawBrackets(ctx, sub.x * fw, sub.y * fh, sub.w * fw, sub.h * fh, col);
-  drawLabel(ctx, sub, fw, fh, col);
+  // 표시용 값은 부드럽게 따라가게 한다
+  const k = 1 - Math.exp(-P().glide * dt);
+  state.view = glideTo(state.view, {
+    x: sub.x, y: sub.y, w: sub.w, h: sub.h,
+    ax: a.anchor.x, ay: a.anchor.y, tx: a.target.x, ty: a.target.y,
+  }, k);
+  const vw = state.view;
 
-  const ax = a.anchor.x * fw, ay = a.anchor.y * fh, tx = a.target.x * fw, ty = a.target.y * fh;
+  const col = a.aligned ? '#4ade80' : '#ffffff';
+  drawBrackets(ctx, vw.x * fw, vw.y * fh, vw.w * fw, vw.h * fh, col);
+  drawLabel(ctx, { ...sub, x: vw.x, y: vw.y, w: vw.w, h: vw.h }, fw, fh, col);
+
+  const ax = vw.ax * fw, ay = vw.ay * fh, tx = vw.tx * fw, ty = vw.ty * fh;
   // 목표 지점
   ctx.lineWidth = 2;
   ctx.strokeStyle = a.aligned ? '#4ade80' : '#ff6b35';
@@ -398,8 +474,8 @@ function draw(now) {
   ctx.beginPath(); ctx.arc(ax, ay, 5, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
   if (!a.aligned) drawArrow(ctx, ax, ay, tx, ty);
 
-  if (a.warn) setHint(a.warn, 'warn');
-  else setHint(a.msg, a.aligned ? 'ok' : '');
+  if (a.warn) setStableHint(a.warn, 'warn', now);
+  else setStableHint(a.msg, a.aligned ? 'ok' : '', now);
 
   updateSuggest(a, now);
 }
@@ -495,14 +571,23 @@ function setHint(text, kind = '') {
   el.hint.className = 'hint' + (kind ? ' ' + kind : '');
 }
 
-// 줌 추천: 0.7초 이상 같은 판단이 유지될 때만 띄운다
+// 안내 문구는 같은 내용이 일정 시간(msgHold) 유지될 때만 바꾼다 → 깜빡임 방지
+let pendHint = null, pendKind = null, pendSince = 0;
+function setStableHint(text, kind, now) {
+  if (text === hintText && kind === hintKind) { pendHint = null; return; }
+  if (hintText == null || hintText === '피사체를 찾는 중…' || hintText === 'AI 모델 불러오는 중…') { setHint(text, kind); return; }
+  if (text !== pendHint || kind !== pendKind) { pendHint = text; pendKind = kind; pendSince = now; return; }
+  if (now - pendSince >= P().msgHold) { setHint(text, kind); pendHint = null; }
+}
+
+// 줌 추천: 일정 시간 이상 같은 판단이 유지될 때만 띄운다
 function updateSuggest(a, now) {
   if (!a.zoomFactor) { hideSuggest(); return; }
   const [mn, mx] = zoomRange();
   const target = Math.min(mx, Math.max(mn, Math.round(state.zoom * a.zoomFactor * 2) / 2));
   if (Math.abs(target - state.zoom) < 0.3) { hideSuggest(); return; }
   if (state.suggestZoom !== target) { state.suggestZoom = target; state.suggestSince = now; }
-  if (now - state.suggestSince > 700) {
+  if (now - state.suggestSince > Math.max(700, P().msgHold * 1.5)) {
     const txt = `🔍 ${fmtZoom(target)} 로 ${target > state.zoom ? '확대' : '축소'}`;
     if (el.zoomSuggest.textContent !== txt) el.zoomSuggest.textContent = txt;
     el.zoomSuggest.classList.remove('hidden');
@@ -707,6 +792,14 @@ el.pvShare.addEventListener('click', () => { if (state.lastShot) share(state.las
 el.btnMenu.addEventListener('click', () => { updateCamInfo(); el.sheet.classList.remove('hidden'); });
 el.sheetClose.addEventListener('click', () => el.sheet.classList.add('hidden'));
 el.sheet.addEventListener('click', (e) => { if (e.target === el.sheet) el.sheet.classList.add('hidden'); });
+const sensSel = document.querySelector('#optSens');
+sensSel.value = state.sens in SENSITIVITY ? state.sens : 'soft';
+sensSel.addEventListener('change', () => {
+  state.sens = sensSel.value;
+  store.set('sens', state.sens);
+  applySensitivity();
+  toast(`가이드 반응: ${P().name}`);
+});
 for (const [input, key] of [[el.optAutoSave, 'autoSave'], [el.optHiRes, 'hiRes'], [el.optHaptic, 'haptic']]) {
   input.checked = state[key];
   input.addEventListener('change', () => { state[key] = input.checked; store.set(key, input.checked); });

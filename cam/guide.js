@@ -3,13 +3,17 @@
 // 원리: 피사체의 기준점(사람이면 머리 근처, 사물이면 중심)을 3분할선/교차점으로 보내도록 안내한다.
 
 const THIRDS = [1 / 3, 2 / 3];
-const ALIGN_IN = 0.04;   // 이 거리 안으로 들어오면 "정렬됨"
-const ALIGN_OUT = 0.065; // 이 거리 밖으로 나가야 "정렬 해제" (깜빡임 방지)
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 export class Guide {
-  constructor() { this.reset(); }
+  constructor() {
+    this.alignIn = 0.07;   // 이 거리 안으로 들어오면 "정렬됨"
+    this.alignOut = 0.10;  // 이 거리 밖으로 나가야 "정렬 해제" (깜빡임 방지)
+    this.reset();
+  }
+
+  setThresholds(alignIn, alignOut) { this.alignIn = alignIn; this.alignOut = alignOut; }
 
   reset() {
     this.sideX = null;
@@ -21,8 +25,8 @@ export class Guide {
   pickThird(v, prev) {
     const d0 = Math.abs(v - THIRDS[0]);
     const d1 = Math.abs(v - THIRDS[1]);
-    if (prev === 0) return d1 + 0.06 < d0 ? 1 : 0;
-    if (prev === 1) return d0 + 0.06 < d1 ? 0 : 1;
+    if (prev === 0) return d1 + 0.1 < d0 ? 1 : 0;
+    if (prev === 1) return d0 + 0.1 < d1 ? 0 : 1;
     return d0 <= d1 ? 0 : 1;
   }
 
@@ -59,7 +63,7 @@ export class Guide {
     const dx = target.x - anchor.x;
     const dyW = (target.y - anchor.y) / aspect; // 세로 차이를 가로 폭 단위로 환산
     const dist = Math.hypot(dx, dyW);
-    this.aligned = this.aligned ? dist < ALIGN_OUT : dist < ALIGN_IN;
+    this.aligned = this.aligned ? dist < this.alignOut : dist < this.alignIn;
 
     // 이동 안내: 피사체를 오른쪽으로 보내려면 카메라는 왼쪽으로 돌려야 한다
     let msg;

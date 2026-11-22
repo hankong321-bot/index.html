@@ -1,6 +1,6 @@
 // 오프라인에서도 열리도록 앱 파일을 캐시한다.
 // 앱 코드를 고치면 VERSION 을 올려야 폰에 새 버전이 반영된다.
-const VERSION = 'framemate-v1';
+const VERSION = 'framemate-v2';
 const SHELL = [
   './', './index.html', './style.css', './app.js', './filters.js', './guide.js',
   './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
