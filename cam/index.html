@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b0b0c">
+<meta name="mobile-web-app-capable" content="yes">
+<title>FrameMate</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="group">
+      <button id="btnTimer" class="pill" type="button">⏱ 끔</button>
+      <button id="btnRatio" class="pill" type="button">3:4</button>
+    </div>
+    <div class="brand">FrameMate</div>
+    <button id="btnMenu" class="icon-btn" type="button" aria-label="설정">⋯</button>
+  </header>
+
+  <main id="stage">
+    <div id="frame">
+      <video id="video" playsinline muted autoplay></video>
+      <div id="tint"></div>
+      <div id="grain"></div>
+      <div id="vignette"></div>
+      <canvas id="overlay"></canvas>
+      <div id="hint" class="hint hidden"></div>
+      <button id="zoomSuggest" class="zoom-suggest hidden" type="button"></button>
+      <div id="countdown" class="countdown hidden"></div>
+      <div id="flash" class="flash"></div>
+    </div>
+    <div id="status" class="status">
+      <p id="statusText">카메라 준비 중…</p>
+      <button id="btnRetry" class="pill hidden" type="button">다시 시도</button>
+    </div>
+  </main>
+
+  <div id="zoomRow" class="zoom-row"></div>
+  <div class="tools">
+    <button class="tool" data-toggle="grid" type="button">격자</button>
+    <button class="tool" data-toggle="level" type="button">수평계</button>
+    <button class="tool" data-toggle="guide" type="button">AI 가이드</button>
+    <button class="tool" id="btnFilter" type="button">필터</button>
+  </div>
+  <section id="filterStrip" class="filter-strip hidden"></section>
+
+  <footer class="bottombar">
+    <button id="thumb" class="thumb" type="button" aria-label="마지막 사진"></button>
+    <button id="shutter" class="shutter" type="button" aria-label="촬영"></button>
+    <button id="btnFlip" class="icon-btn round" type="button" aria-label="카메라 전환">⟲</button>
+  </footer>
+</div>
+
+<!-- 촬영 결과 미리보기 -->
+<div id="preview" class="modal hidden">
+  <img id="previewImg" alt="촬영한 사진">
+  <div class="modal-bar">
+    <button id="pvClose" class="pill" type="button">닫기</button>
+    <button id="pvSave" class="pill" type="button">저장</button>
+    <button id="pvShare" class="pill accent" type="button">공유</button>
+  </div>
+</div>
+
+<!-- 설정 -->
+<div id="sheet" class="modal sheet-wrap hidden">
+  <div class="sheet">
+    <h2>설정</h2>
+    <label class="row"><span>촬영 즉시 저장<small>다운로드 폴더에 JPG로 저장됩니다</small></span><input type="checkbox" id="optAutoSave"></label>
+    <label class="row"><span>고화질 촬영<small>지원 기기에서 센서 해상도로 촬영 (조금 느림)</small></span><input type="checkbox" id="optHiRes"></label>
+    <label class="row"><span>정렬되면 진동</span><input type="checkbox" id="optHaptic"></label>
+    <p class="info" id="camInfo"></p>
+    <button id="sheetClose" class="pill wide" type="button">닫기</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
